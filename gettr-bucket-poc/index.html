@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>POC for Gettr as a file storage</title>
+	<link rel="dns-prefetch" href="https://media.gettr.com">
+	<link rel="dns-prefetch" href="https://shiny-sun-046c.mineplayerspe.workers.dev">
+	<style type="text/css">
+		body {
+			background-color: #424549;
+			text-align: center;
+		}
+		h1, h2 {
+			color: #fff;
+		}
+		noscript {
+			font-weight: bold;
+			color: #fff;
+		}
+		p, label {color: #dcddde;}
+		#download {
+			display: block;
+		}
+	</style>
+</head>
+<body>
+	<h1>Gettr as file storage</h1>
+	<h2>Uses Gettr's media server as a file bucket. (Drag and drop the file you want to upload)</h2>
+	<noscript>Javascript is required to upload files and download chunked ones.</noscript>
+	<script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
+	<form id="downloadForm">
+		<input type="text" name="file metadata" id="fileMetaInput" placeholder="CODE HERE" minlength="18" required>
+		<button type="submit">Download file</button>
+	</form>
+	<div class="uploadProgress" hidden>
+		<label>Uploading...</label>
+		<progress value="0" max="100">Uploading...</label>
+	</div>
+	<script type="text/javascript">
+		var decodedInput;
+		document.getElementById('downloadForm').onsubmit = async function(event) {
+			event.preventDefault();
+			try {
+				decodedInput = JSON.parse(atob(document.getElementById('fileMetaInput').value))
+			} catch (error) {
+				alert('Unable to decode code: ' + error)
+				return;
+			}
+			const foreignUrl = decodedInput.chunks.map(chunk => chunk.url).filter(url => new URL(url).hostname !== 'media.gettr.com')
+			if ((foreignUrl.length > 0) && !confirm('Are you sure you want to download from these URLs?\n' + foreignUrl.map(url => new URL(url).hostname).join('\n'))) return;
+			const filename = decodedInput.name || 'download.txt'
+			const filestream = streamSaver.createWriteStream(filename, {
+				size: decodedInput.size
+			})
+			try {
+				for (const chunk of decodedInput.chunks) {
+					await fetch(chunk.url)
+						.then(res => res.body.pipeTo(filestream, {preventClose: true}));
+				}
+				filestream.close();
+			} catch (error) {
+				filestream.abort()
+				alert('Unable to download file: ' + error)
+				return;
+			}
+		}
+		document.ondrop = async function(event) {
+			event.preventDefault();
+			let droppedFile;
+			if (event.dataTransfer.items) {
+				droppedFile = Array.from(event.dataTransfer.items).find(item => item.kind === 'file')
+				if (droppedFile) droppedFile = droppedFile.getAsFile();
+			} else {
+				droppedFile = event.dataTransfer.files[0]
+			}
+			if (!droppedFile){
+				alert('No files dropped!')
+				return;
+			}
+
+
+			/*
+			var uploadRes;
+			try {
+				uploadRes = await fetch('https://shiny-sun-046c.mineplayerspe.workers.dev/upload', {
+					method: 'POST',
+					body: droppedFile.stream(),
+				})
+			} catch (error) {
+				alert('Unable to upload file: ' + error)
+			}
+			if (!uploadRes.ok) alert('Failed to upload file: ' + await uploadRes.text());
+			const location = uploadRes.headers.get('Location')
+			*/
+
+			// Use XHR instead to implement upload progress bar
+			const progressDiv = document.getElementsByClassName('uploadProgress')[0].cloneNode(true);
+			progressDiv.hidden = false;
+			progressDiv.querySelector('label').innerText = `Uploading ${droppedFile.name}...`
+			const progressBar = progressDiv.querySelector('progress');
+			progressBar.max = droppedFile.size
+
+			const uploadXHR = new XMLHttpRequest();
+			uploadXHR.upload.onloadstart = event => document.body.appendChild(progressDiv);
+			uploadXHR.upload.onprogress = event => progressBar.value = event.loaded;
+			uploadXHR.upload.onloadend = event => progressDiv.remove();
+			uploadXHR.upload.onerror = event => alert('Unable to upload file: ' + event);
+
+			const XHRLoadPromise = new Promise((resolve, reject) => {
+				uploadXHR.onload = resolve; uploadXHR.onerror = reject;
+			})
+			uploadXHR.open('POST', 'https://shiny-sun-046c.mineplayerspe.workers.dev/upload');
+			uploadXHR.send(droppedFile)
+			await XHRLoadPromise;
+			if (uploadXHR.status.toString()[0] !== '2') {
+				alert('Failed to upload file: ' + uploadXHR.responseText)
+			}
+			const location = uploadXHR.getResponseHeader('Location')
+
+
+			const code = btoa(JSON.stringify({
+				chunks: [{url: location}],
+				name: droppedFile.name,
+				size: droppedFile.size,
+			})).replace(/=+$/, '')
+			document.getElementById('fileMetaInput').value = code;
+			alert('Uploaded! Code: ' + code)
+		}
+		document.ondragover = event => event.preventDefault();
+	</script>
+</body>
+</html>
