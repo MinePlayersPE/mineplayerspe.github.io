@@ -17,7 +17,7 @@
 			font-weight: bold;
 			color: #fff;
 		}
-		p, label {color: #dcddde;}
+		p, label, input[type=file] {color: #dcddde;}
 		#download {
 			display: block;
 		}
@@ -32,6 +32,7 @@
 		<input type="text" name="file metadata" id="fileMetaInput" placeholder="CODE HERE" minlength="18" required>
 		<button type="submit">Download file</button>
 	</form>
+	<input type="file" id="uploadButtonInput" name="file upload">
 	<div class="uploadProgress" hidden>
 		<label>Uploading...</label>
 		<progress value="0" max="100">Uploading...</label>
@@ -64,7 +65,62 @@
 				return;
 			}
 		}
-		document.ondrop = async function(event) {
+		async function uploadFile(file) {
+			/*
+			var uploadRes;
+			try {
+				uploadRes = await fetch('https://shiny-sun-046c.mineplayerspe.workers.dev/upload', {
+					method: 'POST',
+					body: file.stream(),
+				})
+			} catch (error) {
+				alert('Unable to upload file: ' + error)
+			}
+			if (!uploadRes.ok) alert('Failed to upload file: ' + await uploadRes.text());
+			const location = uploadRes.headers.get('Location')
+			*/
+			// Use XHR instead to implement upload progress bar
+			const progressDiv = document.getElementsByClassName('uploadProgress')[0].cloneNode(true);
+			progressDiv.hidden = false;
+			progressDiv.querySelector('label').innerText = `Uploading ${file.name}...`
+			const progressBar = progressDiv.querySelector('progress');
+			progressBar.max = file.size
+
+			const uploadXHR = new XMLHttpRequest();
+			uploadXHR.upload.onloadstart = event => document.body.appendChild(progressDiv);
+			uploadXHR.upload.onprogress = event => progressBar.value = event.loaded;
+			uploadXHR.upload.onloadend = event => progressDiv.remove();
+			uploadXHR.upload.onerror = event => alert('Unable to upload file: ' + event);
+
+			const XHRLoadPromise = new Promise((resolve, reject) => {
+				uploadXHR.onload = resolve; uploadXHR.onerror = reject;
+			})
+			uploadXHR.open('POST', 'https://shiny-sun-046c.mineplayerspe.workers.dev/upload');
+			uploadXHR.send(file)
+			await XHRLoadPromise;
+			if (uploadXHR.status.toString()[0] !== '2') {
+				alert('Failed to upload file: ' + uploadXHR.responseText)
+			}
+			const location = uploadXHR.getResponseHeader('Location')
+
+			const code = btoa(JSON.stringify({
+				chunks: [{url: location}],
+				name: file.name,
+				size: file.size,
+			})).replace(/=+$/, '')
+			document.getElementById('fileMetaInput').value = code;
+			alert('Uploaded! Code: ' + code)
+		}
+		document.getElementById('uploadButtonInput').oninput = function(event) {
+			event.preventDefault();
+			const inputFile = document.getElementById('uploadButtonInput').files[0];
+			if (!inputFile) {
+				alert('No files picked!')
+				return;
+			}
+			uploadFile(inputFile);
+		}
+		document.ondrop = function(event) {
 			event.preventDefault();
 			let droppedFile;
 			if (event.dataTransfer.items) {
@@ -77,54 +133,7 @@
 				alert('No files dropped!')
 				return;
 			}
-
-
-			/*
-			var uploadRes;
-			try {
-				uploadRes = await fetch('https://shiny-sun-046c.mineplayerspe.workers.dev/upload', {
-					method: 'POST',
-					body: droppedFile.stream(),
-				})
-			} catch (error) {
-				alert('Unable to upload file: ' + error)
-			}
-			if (!uploadRes.ok) alert('Failed to upload file: ' + await uploadRes.text());
-			const location = uploadRes.headers.get('Location')
-			*/
-
-			// Use XHR instead to implement upload progress bar
-			const progressDiv = document.getElementsByClassName('uploadProgress')[0].cloneNode(true);
-			progressDiv.hidden = false;
-			progressDiv.querySelector('label').innerText = `Uploading ${droppedFile.name}...`
-			const progressBar = progressDiv.querySelector('progress');
-			progressBar.max = droppedFile.size
-
-			const uploadXHR = new XMLHttpRequest();
-			uploadXHR.upload.onloadstart = event => document.body.appendChild(progressDiv);
-			uploadXHR.upload.onprogress = event => progressBar.value = event.loaded;
-			uploadXHR.upload.onloadend = event => progressDiv.remove();
-			uploadXHR.upload.onerror = event => alert('Unable to upload file: ' + event);
-
-			const XHRLoadPromise = new Promise((resolve, reject) => {
-				uploadXHR.onload = resolve; uploadXHR.onerror = reject;
-			})
-			uploadXHR.open('POST', 'https://shiny-sun-046c.mineplayerspe.workers.dev/upload');
-			uploadXHR.send(droppedFile)
-			await XHRLoadPromise;
-			if (uploadXHR.status.toString()[0] !== '2') {
-				alert('Failed to upload file: ' + uploadXHR.responseText)
-			}
-			const location = uploadXHR.getResponseHeader('Location')
-
-
-			const code = btoa(JSON.stringify({
-				chunks: [{url: location}],
-				name: droppedFile.name,
-				size: droppedFile.size,
-			})).replace(/=+$/, '')
-			document.getElementById('fileMetaInput').value = code;
-			alert('Uploaded! Code: ' + code)
+			uploadFile(droppedFile);
 		}
 		document.ondragover = event => event.preventDefault();
 	</script>
