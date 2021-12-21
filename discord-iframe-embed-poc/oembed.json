@@ -7,7 +7,7 @@
 	"width":"100%",
 	"title":"Discord iframe embedding test",
 	"description":"Hello world?",
-	"thumbnail_url":"image.jpg",
+	"thumbnail_url":"https://mineplayerspe.github.io/discord-iframe-embed-poc/image.jpg",
 	"author_name":"Hello world?",
-	"author_url":"redir.html"
+	"author_url":"https://mineplayerspe.github.io/discord-iframe-embed-poc/redir.html"
 }
